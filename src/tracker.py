@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 
 from .utils.bbox import clip_bbox, bbox_from_delta
-from .data.dataset import ANCHOR_RATIOS, STRIDE
+from .data.dataset import ANCHOR_RATIOS, ANCHOR_SCALE, STRIDE
 
 
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
@@ -32,8 +32,8 @@ class SiamRPNTracker:
                 cx = j * self.stride
                 cy = i * self.stride
                 for r in self.ratios:
-                    w = self.stride * np.sqrt(r)
-                    h = self.stride / np.sqrt(r)
+                    w = self.stride * ANCHOR_SCALE * np.sqrt(r)
+                    h = self.stride * ANCHOR_SCALE / np.sqrt(r)
                     anchors.append([cx - w/2, cy - h/2, w, h])
         self.anchors = np.array(anchors, dtype=np.float32)
 

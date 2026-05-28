@@ -1,4 +1,5 @@
 import os
+import math
 import logging
 import torch
 import torch.nn as nn
@@ -6,7 +7,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from tqdm import tqdm
 
 from .models.loss import SiamRPNLoss
-from .data.dataset import UAVTrackingDataset, COCONegativeDataset, _gaussian_label, STRIDE, ANCHOR_RATIOS, _anchors, _bbox_iou
+from .data.dataset import UAVTrackingDataset, COCONegativeDataset, _gaussian_label, STRIDE, ANCHOR_RATIOS, ANCHOR_SCALE, _anchors, _bbox_iou
 from .data.transforms import TrainTransforms
 
 
@@ -17,9 +18,12 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
     x, y, w, h = search_bbox
     cx, cy = x + w / 2, y + h / 2
     crop_x, crop_y, crop_w, crop_h = crop_bbox
-    scale = search_sz / max(crop_w, crop_h)
-    cx_crop = (cx - crop_x) * scale
-    cy_crop = (cy - crop_y) * scale
+    crop_cx = crop_x + crop_w / 2
+    crop_cy = crop_y + crop_h / 2
+    half = max(crop_w, crop_h)
+    scale = search_sz / (2 * half)
+    cx_crop = (cx - crop_cx + half) * scale
+    cy_crop = (cy - crop_cy + half) * scale
 
     sigma = stride // 2
     gaussian = _gaussian_label((response_sz, response_sz),
@@ -29,12 +33,16 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
     cls_target = torch.stack([gaussian, 1.0 - gaussian], dim=0)
     cls_target = cls_target.unsqueeze(0).expand(5, -1, -1, -1)
 
-    anc = _anchors(stride, ANCHOR_RATIOS, response_sz)
+    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)
     anc = anc.reshape(response_sz, response_sz, 5, 4)
 
     num_anc = response_sz * response_sz * 5
     reg_target = torch.zeros(4, num_anc, dtype=torch.float32)
     reg_mask = torch.zeros(num_anc, dtype=torch.float32)
+
+    sw = w * scale
+    sh = h * scale
+    gx, gy, gw, gh = cx_crop - sw/2, cy_crop - sh/2, sw, sh
 
     for i in range(response_sz):
         for j in range(response_sz):
@@ -44,13 +52,13 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
                 anc_h = float(anc_box[3])
                 if anc_w <= 0 or anc_h <= 0:
                     continue
-                iou = _bbox_iou(anc_box, [cx - w/2, cy - h/2, w, h])
+                iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
                 idx = (i * response_sz + j) * 5 + k
                 if iou > 0.6:
-                    reg_target[0, idx] = ((cx - w/2) - anc_box[0]) / anc_w
-                    reg_target[1, idx] = ((cy - h/2) - anc_box[1]) / anc_h
-                    reg_target[2, idx] = torch.log(torch.tensor(w / anc_w).float())
-                    reg_target[3, idx] = torch.log(torch.tensor(h / anc_h).float())
+                    reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
+                    reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
+                    reg_target[2, idx] = math.log(gw / anc_w)
+                    reg_target[3, idx] = math.log(gh / anc_h)
                     reg_mask[idx] = 1.0
 
     return cls_target, reg_target, reg_mask
@@ -67,16 +75,16 @@ def collate_tracking(batch):
         if len(item) == 2:
             template_img, search_img = item
             t, s = TrainTransforms()(template_img, search_img, [0, 0, 127, 127], [0, 0, 255, 255])
-            templates.append(t)
-            searches.append(s)
+            templates.append(torch.from_numpy(t))
+            searches.append(torch.from_numpy(s))
             cls_targets.append(torch.zeros(5, 2, 9, 9, dtype=torch.float32))
             reg_targets.append(torch.zeros(4, 405, dtype=torch.float32))
             reg_masks.append(torch.zeros(405, dtype=torch.float32))
         else:
             template_img, search_img, template_bbox, search_bbox = item
             t, s = TrainTransforms()(template_img, search_img, template_bbox, search_bbox)
-            templates.append(t)
-            searches.append(s)
+            templates.append(torch.from_numpy(t))
+            searches.append(torch.from_numpy(s))
             cls_t, reg_t, mask = compute_targets(search_bbox, template_bbox)
             cls_targets.append(cls_t)
             reg_targets.append(reg_t)

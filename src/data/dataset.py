@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 
 
 ANCHOR_RATIOS = [0.33, 0.5, 1.0, 2.0, 3.0]
+ANCHOR_SCALE = 8
 STRIDE = 16
 
 
@@ -62,15 +63,15 @@ def _gaussian_label(map_size, target_pos, sigma):
     return np.exp(-0.5 * dist / sigma ** 2)
 
 
-def _anchors(stride, ratios, response_sz):
+def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE):
     anchors = []
     for i in range(response_sz):
         for j in range(response_sz):
             cx = j * stride
             cy = i * stride
             for r in ratios:
-                w = stride * np.sqrt(r)
-                h = stride / np.sqrt(r)
+                w = stride * scale * np.sqrt(r)
+                h = stride * scale / np.sqrt(r)
                 anchors.append([cx - w / 2, cy - h / 2, w, h])
     return np.array(anchors, dtype=np.float32)
 
@@ -151,7 +152,7 @@ class UAVTrackingDataset(Dataset):
         cls_target = np.stack([gaussian, 1.0 - gaussian], axis=0)
         cls_target = np.repeat(cls_target[np.newaxis, :, :, :], 5, axis=0)
 
-        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz)
+        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)
         anc = anc.reshape(response_sz, response_sz, 5, 4)
 
         iou_map = np.zeros((response_sz, response_sz, 5), dtype=np.float32)

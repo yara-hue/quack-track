@@ -15,7 +15,7 @@ class TrainTransforms:
 
     def __call__(self, template_img, search_img, template_bbox, search_bbox):
         template_crop = self._crop_context(template_img, template_bbox, self.template_size)
-        search_crop = self._crop_context(search_img, search_bbox, self.search_size)
+        search_crop = self._crop_context(search_img, template_bbox, self.search_size)
 
         if random.random() < 0.5:
             seed = random.randint(0, 2**16)
@@ -32,22 +32,23 @@ class TrainTransforms:
             search_crop = cv2.GaussianBlur(search_crop, (k, k), 0)
 
         if random.random() < 0.2:
-            template_crop = self._random_stretch(template_crop)
+            template_crop = self._random_stretch(template_crop, self.template_size)
         if random.random() < 0.2:
-            search_crop = self._random_stretch(search_crop)
+            search_crop = self._random_stretch(search_crop, self.search_size)
 
         template_tensor = self._to_tensor(template_crop)
         search_tensor = self._to_tensor(search_crop)
 
         return template_tensor, search_tensor
 
-    def _random_stretch(self, img):
+    def _random_stretch(self, img, output_size):
         h, w = img.shape[:2]
         sx = 1.0 + random.uniform(-0.15, 0.15)
         sy = 1.0 + random.uniform(-0.15, 0.15)
         new_w = max(1, int(w * sx))
         new_h = max(1, int(h * sy))
-        return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        stretched = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        return cv2.resize(stretched, (output_size, output_size), interpolation=cv2.INTER_LINEAR)
 
     def _crop_context(self, img, bbox, output_size):
         x, y, w, h = bbox
