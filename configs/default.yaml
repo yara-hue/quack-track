@@ -1,0 +1,37 @@
+model:
+  backbone:
+    pretrained: true
+    frozen: true
+  fpn:
+    out_channels: 256
+    multi_level_train: true
+  head:
+    num_anchors: 5
+
+loss:
+  cls_weight: 1.0
+  reg_weight: 1.2
+
+data:
+  uav123_root: ./data/UAV123_10fps
+  uav20l_root: ./data/UAV20L
+  coco_root: null
+  coco_samples: 50000
+  template_sz: 127
+  search_sz: 255
+  pairs_per_seq: 20
+
+train:
+  batch_size: 32
+  epochs: 50
+  warmup_epochs: 5
+  lr: 0.001
+  momentum: 0.9
+  weight_decay: 0.0001
+  num_workers: 4
+  save_every: 10
+
+eval:
+  device: cuda
+  template_sz: 127
+  search_sz: 255
