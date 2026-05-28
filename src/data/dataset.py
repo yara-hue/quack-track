@@ -17,18 +17,29 @@ def _read_annotation(anno_path):
             parts = line.strip().split(',')
             if len(parts) == 4:
                 x, y, w, h = map(float, parts)
-                bboxes.append([x, y, w, h])
+                if not any(np.isnan(v) for v in [x, y, w, h]):
+                    bboxes.append([x, y, w, h])
+                else:
+                    bboxes.append(None)
     return bboxes
 
 
 def _list_sequences(data_root):
     seq_dir = os.path.join(data_root, 'data_seq')
     sequences = []
-    if os.path.isdir(seq_dir):
-        for name in sorted(os.listdir(seq_dir)):
-            img_dir = os.path.join(seq_dir, name, 'img')
-            if os.path.isdir(img_dir):
-                sequences.append(name)
+    if not os.path.isdir(seq_dir):
+        return sequences
+
+    for name in sorted(os.listdir(seq_dir)):
+        img_dir = os.path.join(seq_dir, name, 'img')
+        if os.path.isdir(img_dir):
+            sequences.append(name)
+            continue
+        for sub in sorted(os.listdir(os.path.join(seq_dir, name))):
+            img_sub = os.path.join(seq_dir, name, sub, 'img')
+            if os.path.isdir(img_sub):
+                sequences.append(sub)
+
     return sequences
 
 
@@ -88,32 +99,27 @@ class UAVTrackingDataset(Dataset):
                 continue
             imgs = sorted(os.listdir(img_dir))
             bboxes = _read_annotation(anno_path)
-            if len(bboxes) < 2:
+            valid_idx = [i for i, b in enumerate(bboxes) if b is not None]
+            if len(valid_idx) < 2:
                 continue
-            n = min(len(imgs), len(bboxes))
             for _ in range(pairs_per_seq):
-                t = random.randint(0, n - 2)
-                s = t + random.randint(1, min(5, n - 1 - t))
-                self.pairs.append((seq_name, t, s))
+                ti = random.randint(0, len(valid_idx) - 2)
+                t = valid_idx[ti]
+                max_gap = min(5, len(valid_idx) - 1 - ti)
+                si = ti + random.randint(1, max_gap)
+                s = valid_idx[si]
+                self.pairs.append((seq_name, t, s, bboxes[t], bboxes[s]))
 
     def __len__(self):
         return len(self.pairs)
 
-    def _load_image(self, seq_name, idx):
-        img_path = os.path.join(self.data_root, 'data_seq', seq_name, 'img',
-                                sorted(os.listdir(os.path.join(self.data_root, 'data_seq', seq_name, 'img')))[idx])
-        return cv2.cvtColor(cv2.imread(img_path), cv2.COLOR_BGR2RGB)
-
-    def _bbox_in_crop(self, bbox, crop_bbox):
-        x, y, w, h = bbox
-        cx, cy = x + w / 2, y + h / 2
-        crop_x, crop_y, crop_w, crop_h = crop_bbox
-        scale = self.search_sz / max(crop_w, crop_h)
-        new_cx = (cx - crop_x) * scale
-        new_cy = (cy - crop_y) * scale
-        new_w = w * scale
-        new_h = h * scale
-        return np.array([new_cx - new_w / 2, new_cy - new_h / 2, new_w, new_h], dtype=np.float32)
+    def __getitem__(self, idx):
+        seq_name, t_idx, s_idx, template_bbox, search_bbox = self.pairs[idx]
+        img_dir = os.path.join(self.data_root, 'data_seq', seq_name, 'img')
+        imgs = sorted(os.listdir(img_dir))
+        template_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[t_idx])), cv2.COLOR_BGR2RGB)
+        search_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[s_idx])), cv2.COLOR_BGR2RGB)
+        return template_img, search_img, template_bbox, search_bbox
 
     def _compute_targets(self, search_bbox, crop_bbox):
         x, y, w, h = search_bbox
@@ -160,21 +166,6 @@ class UAVTrackingDataset(Dataset):
         pos_mask = pos_mask.reshape(-1)
 
         return cls_target, reg_target, pos_mask
-
-    def __getitem__(self, idx):
-        seq_name, t_idx, s_idx = self.pairs[idx]
-        seq_img_dir = os.path.join(self.data_root, 'data_seq', seq_name, 'img')
-        imgs = sorted(os.listdir(seq_img_dir))
-        anno_path = os.path.join(self.data_root, 'anno', f'{seq_name}.txt')
-        bboxes = _read_annotation(anno_path)
-
-        template_img = cv2.cvtColor(cv2.imread(os.path.join(seq_img_dir, imgs[t_idx])), cv2.COLOR_BGR2RGB)
-        search_img = cv2.cvtColor(cv2.imread(os.path.join(seq_img_dir, imgs[s_idx])), cv2.COLOR_BGR2RGB)
-        template_bbox = bboxes[t_idx]
-        search_bbox = bboxes[s_idx]
-
-        return template_img, search_img, template_bbox, search_bbox
-
 
 class COCONegativeDataset(Dataset):
     def __init__(self, coco_root, num_samples=50000, template_sz=127, search_sz=255):
