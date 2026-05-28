@@ -24,6 +24,17 @@ def _read_annotation(anno_path):
     return bboxes
 
 
+def _seq_img_dir(seq_dir, name):
+    candidates = [
+        os.path.join(seq_dir, name, 'img'),
+        os.path.join(seq_dir, name),
+    ]
+    for cand in candidates:
+        if os.path.isdir(cand) and any(f.lower().endswith(('.jpg', '.jpeg', '.png')) for f in os.listdir(cand)[:1]):
+            return cand
+    return None
+
+
 def _list_sequences(data_root):
     seq_dir = os.path.join(data_root, 'data_seq')
     sequences = []
@@ -31,13 +42,11 @@ def _list_sequences(data_root):
         return sequences
 
     for name in sorted(os.listdir(seq_dir)):
-        img_dir = os.path.join(seq_dir, name, 'img')
-        if os.path.isdir(img_dir):
+        if _seq_img_dir(seq_dir, name) is not None:
             sequences.append(name)
             continue
         for sub in sorted(os.listdir(os.path.join(seq_dir, name))):
-            img_sub = os.path.join(seq_dir, name, sub, 'img')
-            if os.path.isdir(img_sub):
+            if _seq_img_dir(os.path.join(seq_dir, name), sub) is not None:
                 sequences.append(sub)
 
     return sequences
@@ -113,10 +122,19 @@ class UAVTrackingDataset(Dataset):
     def __len__(self):
         return len(self.pairs)
 
+    def _get_img_dir(self):
+        seq_dir = os.path.join(self.data_root, 'data_seq')
+        for name in set(p[0] for p in self.pairs):
+            img_dir = _seq_img_dir(seq_dir, name)
+            if img_dir:
+                return img_dir, name
+        return None, None
+
     def __getitem__(self, idx):
         seq_name, t_idx, s_idx, template_bbox, search_bbox = self.pairs[idx]
-        img_dir = os.path.join(self.data_root, 'data_seq', seq_name, 'img')
-        imgs = sorted(os.listdir(img_dir))
+        seq_dir = os.path.join(self.data_root, 'data_seq')
+        img_dir = _seq_img_dir(seq_dir, seq_name)
+        imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
         template_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[t_idx])), cv2.COLOR_BGR2RGB)
         search_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[s_idx])), cv2.COLOR_BGR2RGB)
         return template_img, search_img, template_bbox, search_bbox

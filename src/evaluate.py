@@ -5,7 +5,7 @@ import torch
 from tqdm import tqdm
 
 from .tracker import SiamRPNTracker
-from .data.dataset import _read_annotation, _list_sequences
+from .data.dataset import _read_annotation, _list_sequences, _seq_img_dir
 from .utils.metrics import center_error, overlap, compute_precision_curve, compute_success_curve
 
 
@@ -18,7 +18,7 @@ def evaluate_uav20l(model, data_root, device='cuda', template_sz=127, search_sz=
     seq_results = {}
 
     for seq_name in tqdm(seq_names, desc='Evaluating'):
-        img_dir = os.path.join(data_root, 'data_seq', seq_name, 'img')
+        img_dir = _seq_img_dir(os.path.join(data_root, 'data_seq'), seq_name)
         anno_path = os.path.join(data_root, 'anno', f'{seq_name}.txt')
         if not os.path.isdir(img_dir) or not os.path.isfile(anno_path):
             continue
