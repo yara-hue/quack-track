@@ -102,33 +102,27 @@ class UAVTrackingDataset(Dataset):
 
         self.pairs = []
         for seq_name in seq_names:
-            img_dir = os.path.join(data_root, 'data_seq', seq_name, 'img')
+            seq_dir = os.path.join(data_root, 'data_seq')
+            img_dir = _seq_img_dir(seq_dir, seq_name)
             anno_path = os.path.join(data_root, 'anno', f'{seq_name}.txt')
             if not os.path.isdir(img_dir) or not os.path.isfile(anno_path):
                 continue
-            imgs = sorted(os.listdir(img_dir))
+            imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
             bboxes = _read_annotation(anno_path)
             valid_idx = [i for i, b in enumerate(bboxes) if b is not None]
-            if len(valid_idx) < 2:
+            n_valid = len(valid_idx)
+            if n_valid < 2:
                 continue
             for _ in range(pairs_per_seq):
-                ti = random.randint(0, len(valid_idx) - 2)
+                ti = random.randint(0, n_valid - 2)
                 t = valid_idx[ti]
-                max_gap = min(5, len(valid_idx) - 1 - ti)
+                max_gap = min(5, n_valid - 1 - ti)
                 si = ti + random.randint(1, max_gap)
                 s = valid_idx[si]
                 self.pairs.append((seq_name, t, s, bboxes[t], bboxes[s]))
 
     def __len__(self):
         return len(self.pairs)
-
-    def _get_img_dir(self):
-        seq_dir = os.path.join(self.data_root, 'data_seq')
-        for name in set(p[0] for p in self.pairs):
-            img_dir = _seq_img_dir(seq_dir, name)
-            if img_dir:
-                return img_dir, name
-        return None, None
 
     def __getitem__(self, idx):
         seq_name, t_idx, s_idx, template_bbox, search_bbox = self.pairs[idx]
