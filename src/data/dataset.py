@@ -110,7 +110,8 @@ class UAVTrackingDataset(Dataset):
                 continue
             imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
             bboxes = _read_annotation(anno_path)
-            valid_idx = [i for i, b in enumerate(bboxes) if b is not None]
+            n_imgs = len(imgs)
+            valid_idx = [i for i, b in enumerate(bboxes[:n_imgs]) if b is not None]
             n_valid = len(valid_idx)
             if n_valid < 2:
                 continue
