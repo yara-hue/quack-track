@@ -101,10 +101,14 @@ class SiamRPNTracker:
         cls_score = torch.softmax(cls_logits, dim=1)[0, 1].cpu().numpy().ravel()
         cls_score = (1 - self.window_influence) * cls_score + self.window_influence * self.cos_window
 
-        best_idx = np.argmax(cls_score)
+        best_idx = int(np.argmax(cls_score))
 
-        reg = reg_deltas[0, :, best_idx // self.response_sz, best_idx % self.response_sz].cpu().numpy()
-        delta = reg.tolist()
+        anchor_k = best_idx % 5
+        spatial_idx = best_idx // 5
+        h = spatial_idx // self.response_sz
+        w = spatial_idx % self.response_sz
+
+        delta = reg_deltas[0, anchor_k*4:(anchor_k+1)*4, h, w].cpu().numpy().tolist()
 
         pred_in_crop = bbox_from_delta(self.anchors[best_idx], delta)
 
