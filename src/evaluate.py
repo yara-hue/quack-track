@@ -2,11 +2,14 @@ import os
 import cv2
 import numpy as np
 import torch
+import logging
 from tqdm import tqdm
 
 from .tracker import SiamRPNTracker
 from .data.dataset import _read_annotation, _seq_img_dir
 from .utils.metrics import center_error, overlap, compute_precision_curve, compute_success_curve
+
+logger = logging.getLogger('quack-track')
 
 
 def _find_annotation_file(anno_dir, seq_name):
@@ -65,16 +68,21 @@ def evaluate_uav20l(model, data_root, img_root=None, device='cuda', template_sz=
         if n < 2:
             continue
 
-        first_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[0])), cv2.COLOR_BGR2RGB)
-        if gt_bboxes[0] is None:
+        first_frame = cv2.imread(os.path.join(img_dir, imgs[0]))
+        if first_frame is None or gt_bboxes[0] is None:
+            logger.warning(f'Skipping {seq_name}: first frame missing or invalid annotation')
             continue
+        first_img = cv2.cvtColor(first_frame, cv2.COLOR_BGR2RGB)
         tracker.init(first_img, gt_bboxes[0])
 
         errors = []
         overlaps = []
 
         for i in range(1, n):
-            img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[i])), cv2.COLOR_BGR2RGB)
+            frame = cv2.imread(os.path.join(img_dir, imgs[i]))
+            if frame is None:
+                continue
+            img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             pred = tracker.track(img)
             gt = gt_bboxes[i]
             if gt is None:
