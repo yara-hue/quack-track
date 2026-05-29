@@ -36,6 +36,7 @@ def main():
 
     checkpoint = torch.load(args.checkpoint, map_location=args.device)
     model.load_state_dict(checkpoint['model_state_dict'])
+    model.to(args.device)
     logger.info(f'Loaded checkpoint from epoch {checkpoint.get("epoch", "?")}')
 
     logger.info('Evaluating on UAV20L...')
