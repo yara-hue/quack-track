@@ -213,6 +213,7 @@ class Trainer:
                     'epoch': epoch,
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scheduler_state_dict': self.scheduler.state_dict(),
                     'loss': avg_loss,
                 }, os.path.join(checkpoint_dir, 'best_model.pth'))
                 logger.info(f'Checkpoint saved (loss={avg_loss:.4f})')
@@ -222,6 +223,7 @@ class Trainer:
                     'epoch': epoch,
                     'model_state_dict': self.model.state_dict(),
                     'optimizer_state_dict': self.optimizer.state_dict(),
+                    'scheduler_state_dict': self.scheduler.state_dict(),
                     'loss': avg_loss,
                 }, os.path.join(checkpoint_dir, f'checkpoint_epoch{epoch+1}.pth'))
 
@@ -229,6 +231,7 @@ class Trainer:
             'epoch': self.cfg['train']['epochs'] - 1,
             'model_state_dict': self.model.state_dict(),
             'optimizer_state_dict': self.optimizer.state_dict(),
+            'scheduler_state_dict': self.scheduler.state_dict(),
             'loss': avg_loss,
         }, os.path.join(checkpoint_dir, 'final_model.pth'))
         logger.info('Training complete.')
