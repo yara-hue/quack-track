@@ -15,6 +15,7 @@ loss:
 data:
   uav123_root: ./data/UAV123
   uav20l_root: ./data/UAV20L
+  uav20l_exclude: true
   coco_root: null
   coco_samples: 50000
   template_sz: 127

@@ -10,6 +10,13 @@ ANCHOR_RATIOS = [0.33, 0.5, 1.0, 2.0, 3.0]
 ANCHOR_SCALE = 8
 STRIDE = 16
 
+UAV20L_SEQS = {
+    'bike1', 'bird1', 'car1', 'car3', 'car6', 'car8', 'car9', 'car16',
+    'group1', 'group2', 'group3',
+    'person2', 'person4', 'person5', 'person7', 'person14', 'person17', 'person19', 'person20',
+    'uav1',
+}
+
 
 def _read_annotation(anno_path):
     bboxes = []
@@ -101,7 +108,8 @@ def _bbox_iou(bbox1, bbox2):
 
 
 class UAVTrackingDataset(Dataset):
-    def __init__(self, data_root, split='train', pairs_per_seq=20, template_sz=127, search_sz=255):
+    def __init__(self, data_root, split='train', pairs_per_seq=20, template_sz=127, search_sz=255,
+                 exclude_seqs=None):
         self.data_root = data_root
         self.template_sz = template_sz
         self.search_sz = search_sz
@@ -113,6 +121,9 @@ class UAVTrackingDataset(Dataset):
             with open(split_path) as f:
                 split_seqs = json.load(f)
             seq_entries = [(n, d) for n, d in seq_entries if n in split_seqs]
+
+        if exclude_seqs:
+            seq_entries = [(n, d) for n, d in seq_entries if n not in exclude_seqs]
 
         self.pairs = []
         for seq_name, img_dir in seq_entries:

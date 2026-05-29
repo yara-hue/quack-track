@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 from tqdm import tqdm
 
 from .models.loss import SiamRPNLoss
-from .data.dataset import UAVTrackingDataset, COCONegativeDataset, _gaussian_label, STRIDE, ANCHOR_RATIOS, ANCHOR_SCALE, _anchors, _bbox_iou
+from .data.dataset import UAVTrackingDataset, COCONegativeDataset, UAV20L_SEQS, _gaussian_label, STRIDE, ANCHOR_RATIOS, ANCHOR_SCALE, _anchors, _bbox_iou
 from .data.transforms import TrainTransforms
 
 
@@ -129,9 +129,13 @@ class Trainer:
 
     def _build_dataloaders(self):
         cfg = self.cfg
+        exclude = None
+        if cfg['data'].get('uav20l_exclude', True):
+            exclude = UAV20L_SEQS
         tracking = UAVTrackingDataset(
             data_root=cfg['data']['uav123_root'],
-            pairs_per_seq=cfg['data']['pairs_per_seq']
+            pairs_per_seq=cfg['data']['pairs_per_seq'],
+            exclude_seqs=exclude
         )
         if cfg['data'].get('coco_root'):
             coco = COCONegativeDataset(
