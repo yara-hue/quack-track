@@ -43,6 +43,7 @@ def main():
         logger.info(f'Resuming from checkpoint: {args.resume}')
         checkpoint = torch.load(args.resume, map_location=args.device)
         model.load_state_dict(checkpoint['model_state_dict'])
+        model.to(args.device)
         trainer.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         if 'scheduler_state_dict' in checkpoint:
             trainer.scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
