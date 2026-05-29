@@ -42,6 +42,7 @@ def main():
     results = evaluate_uav20l(
         model,
         data_root=cfg['data']['uav20l_root'],
+        img_root=cfg['data'].get('uav123_root'),
         device=args.device,
         template_sz=cfg['eval']['template_sz'],
         search_sz=cfg['eval']['search_sz'],
