@@ -98,11 +98,11 @@ class SiamRPNTracker:
             corr = self.model.corr(self.template_feat, s_p4)
             cls_logits, reg_deltas = self.model.rpn_head(corr)
 
-        cls_score = torch.softmax(cls_logits, dim=1)[0, 1].cpu().numpy().ravel()
-        cls_score = (1 - self.window_influence) * cls_score + self.window_influence * self.cos_window
+        cls_all = cls_logits.view(1, 5, 2, self.response_sz, self.response_sz)
+        fg_scores = cls_all[0, :, 1, :, :].cpu().numpy().ravel()
+        fg_scores = (1 - self.window_influence) * fg_scores + self.window_influence * np.tile(self.cos_window, 5)
 
-        best_idx = int(np.argmax(cls_score))
-
+        best_idx = int(np.argmax(fg_scores))
         anchor_k = best_idx % 5
         spatial_idx = best_idx // 5
         h = spatial_idx // self.response_sz
