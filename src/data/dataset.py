@@ -76,6 +76,17 @@ def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE):
     return np.array(anchors, dtype=np.float32)
 
 
+def _find_annotation(anno_dir, seq_name):
+    candidates = [
+        os.path.join(anno_dir, f'{seq_name}.txt'),
+        os.path.join(anno_dir, 'UAV123', f'{seq_name}.txt'),
+    ]
+    for cand in candidates:
+        if os.path.isfile(cand):
+            return cand
+    return None
+
+
 def _bbox_iou(bbox1, bbox2):
     x1 = max(bbox1[0], bbox2[0])
     y1 = max(bbox1[1], bbox2[1])
@@ -105,8 +116,9 @@ class UAVTrackingDataset(Dataset):
         for seq_name in seq_names:
             seq_dir = os.path.join(data_root, 'data_seq')
             img_dir = _seq_img_dir(seq_dir, seq_name)
-            anno_path = os.path.join(data_root, 'anno', f'{seq_name}.txt')
-            if not os.path.isdir(img_dir) or not os.path.isfile(anno_path):
+            anno_dir = os.path.join(data_root, 'anno')
+            anno_path = _find_annotation(anno_dir, seq_name)
+            if not os.path.isdir(img_dir) or anno_path is None:
                 continue
             imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
             bboxes = _read_annotation(anno_path)
@@ -121,15 +133,13 @@ class UAVTrackingDataset(Dataset):
                 max_gap = min(5, n_valid - 1 - ti)
                 si = ti + random.randint(1, max_gap)
                 s = valid_idx[si]
-                self.pairs.append((seq_name, t, s, bboxes[t], bboxes[s]))
+                self.pairs.append((seq_name, t, s, bboxes[t], bboxes[s], img_dir, anno_path))
 
     def __len__(self):
         return len(self.pairs)
 
     def __getitem__(self, idx):
-        seq_name, t_idx, s_idx, template_bbox, search_bbox = self.pairs[idx]
-        seq_dir = os.path.join(self.data_root, 'data_seq')
-        img_dir = _seq_img_dir(seq_dir, seq_name)
+        seq_name, t_idx, s_idx, template_bbox, search_bbox, img_dir, anno_path = self.pairs[idx]
         imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
         template_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[t_idx])), cv2.COLOR_BGR2RGB)
         search_img = cv2.cvtColor(cv2.imread(os.path.join(img_dir, imgs[s_idx])), cv2.COLOR_BGR2RGB)

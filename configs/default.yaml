@@ -13,7 +13,7 @@ loss:
   reg_weight: 1.2
 
 data:
-  uav123_root: ./data/UAV123_10fps
+  uav123_root: ./data/UAV123
   uav20l_root: ./data/UAV20L
   coco_root: null
   coco_samples: 50000
