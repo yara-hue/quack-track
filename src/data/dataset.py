@@ -43,12 +43,14 @@ def _list_sequences(data_root):
         return sequences
 
     for name in sorted(os.listdir(seq_dir)):
-        if _seq_img_dir(seq_dir, name) is not None:
-            sequences.append(name)
+        img_dir = _seq_img_dir(seq_dir, name)
+        if img_dir is not None:
+            sequences.append((name, img_dir))
             continue
         for sub in sorted(os.listdir(os.path.join(seq_dir, name))):
-            if _seq_img_dir(os.path.join(seq_dir, name), sub) is not None:
-                sequences.append(sub)
+            img_dir = _seq_img_dir(os.path.join(seq_dir, name), sub)
+            if img_dir is not None:
+                sequences.append((sub, img_dir))
 
     return sequences
 
@@ -105,17 +107,15 @@ class UAVTrackingDataset(Dataset):
         self.search_sz = search_sz
         self.pairs_per_seq = pairs_per_seq
 
-        seq_names = _list_sequences(data_root)
+        seq_entries = _list_sequences(data_root)
         split_path = os.path.join(data_root, f'{split}.json')
         if os.path.exists(split_path):
             with open(split_path) as f:
                 split_seqs = json.load(f)
-            seq_names = [s for s in seq_names if s in split_seqs]
+            seq_entries = [(n, d) for n, d in seq_entries if n in split_seqs]
 
         self.pairs = []
-        for seq_name in seq_names:
-            seq_dir = os.path.join(data_root, 'data_seq')
-            img_dir = _seq_img_dir(seq_dir, seq_name)
+        for seq_name, img_dir in seq_entries:
             anno_dir = os.path.join(data_root, 'anno')
             anno_path = _find_annotation(anno_dir, seq_name)
             if img_dir is None or not os.path.isdir(img_dir) or anno_path is None:
