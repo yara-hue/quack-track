@@ -118,7 +118,7 @@ class UAVTrackingDataset(Dataset):
             img_dir = _seq_img_dir(seq_dir, seq_name)
             anno_dir = os.path.join(data_root, 'anno')
             anno_path = _find_annotation(anno_dir, seq_name)
-            if not os.path.isdir(img_dir) or anno_path is None:
+            if img_dir is None or not os.path.isdir(img_dir) or anno_path is None:
                 continue
             imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
             bboxes = _read_annotation(anno_path)
