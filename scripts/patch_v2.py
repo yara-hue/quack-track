@@ -613,18 +613,41 @@ def fix_test_script():
 
 def fix_iou_threshold():
     """Lower positive IoU threshold from 0.6 → 0.5 so non-square targets get regression signal."""
+    patched = False
     for fpath in [
         os.path.join(BASE, "src", "trainer.py"),
         os.path.join(BASE, "src", "data", "dataset.py"),
     ]:
         with open(fpath) as f:
             c = f.read()
+        orig = c
         c = c.replace("if iou > 0.6:", "if iou > 0.5:")
         c = c.replace("if iou_map[i, j, k] > 0.6:", "if iou_map[i, j, k] > 0.5:")
         c = c.replace("iou_map > 0.6", "iou_map > 0.5")
-        with open(fpath, 'w') as f:
+        if c != orig:
+            with open(fpath, 'w') as f:
+                f.write(c)
+            patched = True
+    if patched:
+        print("[OK] IoU threshold: 0.6 → 0.5")
+    else:
+        print("[OK] IoU threshold: already 0.5")
+
+
+def _apply_patch(path, old, new, name):
+    """Replace old with new if old is present; skip if new already present."""
+    with open(path) as f:
+        c = f.read()
+    if old in c:
+        c = c.replace(old, new)
+        with open(path, 'w') as f:
             f.write(c)
-    print("[OK] IoU threshold: 0.6 → 0.5")
+        print(f"[OK] {name}")
+        return True
+    if new in c:
+        print(f"[OK] {name} (already patched)")
+        return True
+    raise AssertionError(f"{name}: pattern not found in {path}")
 
 
 def fix_anchor_centering():
@@ -633,26 +656,21 @@ def fix_anchor_centering():
 
     # --- dataset.py: _anchors() ---
     path = os.path.join(BASE, "src", "data", "dataset.py")
-    with open(path) as f:
-        c = f.read()
-    old = """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE):
+    _apply_patch(path,
+        """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE):
     anchors = []
     for i in range(response_sz):
         for j in range(response_sz):
             cx = j * stride
-            cy = i * stride"""
-    new = """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE, search_sz=255):
+            cy = i * stride""",
+        """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE, search_sz=255):
     anchors = []
     center = (search_sz - (response_sz - 1) * stride) / 2.0
     for i in range(response_sz):
         for j in range(response_sz):
             cx = j * stride + center
-            cy = i * stride + center"""
-    assert old in c, "_anchors() not found in dataset.py"
-    c = c.replace(old, new)
-    with open(path, 'w') as f:
-        f.write(c)
-    print("[OK] dataset.py: _anchors() centered")
+            cy = i * stride + center""",
+        "dataset.py: _anchors() centered")
 
     # --- dataset.py: _compute_targets() Gaussian label (dead code) ---
     with open(path) as f:
@@ -668,58 +686,52 @@ def fix_anchor_centering():
         c = c.replace(old_g, new_g)
         old_a = """        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)"""
         new_a = """        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE, self.search_sz)"""
-        assert old_a in c, "_anchors call not found in dataset.py _compute_targets"
-        c = c.replace(old_a, new_a)
+        _apply_patch(path, old_a, new_a,
+                     "dataset.py: _compute_targets() anchors centered (dead code)")
         with open(path, 'w') as f:
             f.write(c)
         print("[OK] dataset.py: _compute_targets() gaussian centered (dead code)")
+    elif new_g in c:
+        print("[OK] dataset.py: _compute_targets() gaussian centered (dead code) (already patched)")
     else:
-        print("[OK] dataset.py: _compute_targets() already fixed or absent")
+        print("[OK] dataset.py: _compute_targets() absent or skipped")
 
     # --- trainer.py: compute_targets() Gaussian label ---
-    path = os.path.join(BASE, "src", "trainer.py")
-    with open(path) as f:
-        c = f.read()
-    old_gt = """    sigma = stride // 2
+    _apply_patch(
+        os.path.join(BASE, "src", "trainer.py"),
+        """    sigma = stride // 2
     gaussian = _gaussian_label((response_sz, response_sz),
-                                (cx_crop / stride, cy_crop / stride), sigma)"""
-    new_gt = """    sigma = stride // 2
+                                (cx_crop / stride, cy_crop / stride), sigma)""",
+        """    sigma = stride // 2
     center = (search_sz - (response_sz - 1) * stride) / 2.0
     gx_resp = (cx_crop - center) / stride
     gy_resp = (cy_crop - center) / stride
     gaussian = _gaussian_label((response_sz, response_sz),
-                                (gx_resp, gy_resp), sigma)"""
-    assert old_gt in c, "Gaussian label not found in trainer.py compute_targets"
-    c = c.replace(old_gt, new_gt)
+                                (gx_resp, gy_resp), sigma)""",
+        "trainer.py: compute_targets() gaussian centered")
 
-    old_ac = """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)"""
-    new_ac = """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE, search_sz)"""
-    assert old_ac in c, "_anchors call not found in trainer.py compute_targets"
-    c = c.replace(old_ac, new_ac)
-    with open(path, 'w') as f:
-        f.write(c)
-    print("[OK] trainer.py: compute_targets() gaussian + anchors centered")
+    # --- trainer.py: _anchors() call ---
+    _apply_patch(
+        os.path.join(BASE, "src", "trainer.py"),
+        """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)""",
+        """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE, search_sz)""",
+        "trainer.py: compute_targets() anchors centered")
 
     # --- tracker.py: _build_anchors() ---
-    path = os.path.join(BASE, "src", "tracker.py")
-    with open(path) as f:
-        c = f.read()
-    old_tr = """        anchors = []
+    _apply_patch(
+        os.path.join(BASE, "src", "tracker.py"),
+        """        anchors = []
         for i in range(self.response_sz):
             for j in range(self.response_sz):
                 cx = j * self.stride
-                cy = i * self.stride"""
-    new_tr = """        anchors = []
+                cy = i * self.stride""",
+        """        anchors = []
         center = (self.search_sz - (self.response_sz - 1) * self.stride) / 2.0
         for i in range(self.response_sz):
             for j in range(self.response_sz):
                 cx = j * self.stride + center
-                cy = i * self.stride + center"""
-    assert old_tr in c, "_build_anchors() not found in tracker.py"
-    c = c.replace(old_tr, new_tr)
-    with open(path, 'w') as f:
-        f.write(c)
-    print("[OK] tracker.py: _build_anchors() centered")
+                cy = i * self.stride + center""",
+        "tracker.py: _build_anchors() centered")
 
 
 if __name__ == "__main__":
