@@ -56,6 +56,18 @@ def add_debug_to_compute_targets():
     return cls_target, reg_target, reg_mask"""
 
     new = """    max_iou = -1.0
+    for i in range(response_sz):
+        for j in range(response_sz):
+            for k in range(5):
+                anc_box = anc[i, j, k]
+                anc_w = float(anc_box[2])
+                anc_h = float(anc_box[3])
+                if anc_w > 0 and anc_h > 0:
+                    iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
+                    max_iou = max(max_iou, iou)
+
+    pos_threshold = max(0.1, max_iou * 0.5) if max_iou > 0 else 1.0
+
     pos_count = 0
     for i in range(response_sz):
         for j in range(response_sz):
@@ -66,9 +78,8 @@ def add_debug_to_compute_targets():
                 if anc_w <= 0 or anc_h <= 0:
                     continue
                 iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
-                max_iou = max(max_iou, iou)
                 idx = (i * response_sz + j) * 5 + k
-                if iou > 0.5:
+                if iou > 0 and iou >= pos_threshold:
                     pos_count += 1
                     reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
                     reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
@@ -77,8 +88,7 @@ def add_debug_to_compute_targets():
                     reg_mask[idx] = 1.0
 
     if pos_count == 0:
-        import logging
-        logging.getLogger('quack-track').warning(
+        logger.warning(
             'compute_targets: ZERO positive anchors (max_iou=%.3f, gw=%.1f gh=%.1f '
             'gx=%.1f gy=%.1f)', max_iou, gw, gh, gx, gy
         )

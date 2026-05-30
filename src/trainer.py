@@ -44,6 +44,20 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
     sh = h * scale
     gx, gy, gw, gh = cx_crop - sw/2, cy_crop - sh/2, sw, sh
 
+    max_iou = -1.0
+    for i in range(response_sz):
+        for j in range(response_sz):
+            for k in range(5):
+                anc_box = anc[i, j, k]
+                anc_w = float(anc_box[2])
+                anc_h = float(anc_box[3])
+                if anc_w > 0 and anc_h > 0:
+                    iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
+                    max_iou = max(max_iou, iou)
+
+    pos_threshold = max(0.1, max_iou * 0.5) if max_iou > 0 else 1.0
+
+    pos_count = 0
     for i in range(response_sz):
         for j in range(response_sz):
             for k in range(5):
@@ -54,12 +68,19 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
                     continue
                 iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
                 idx = (i * response_sz + j) * 5 + k
-                if iou > 0.5:
+                if iou > 0 and iou >= pos_threshold:
+                    pos_count += 1
                     reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
                     reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
                     reg_target[2, idx] = math.log(gw / anc_w)
                     reg_target[3, idx] = math.log(gh / anc_h)
                     reg_mask[idx] = 1.0
+
+    if pos_count == 0:
+        logger.warning(
+            'compute_targets: ZERO positive anchors (max_iou=%.3f, gw=%.1f gh=%.1f '
+            'gx=%.1f gy=%.1f)', max_iou, gw, gh, gx, gy
+        )
 
     return cls_target, reg_target, reg_mask
 
