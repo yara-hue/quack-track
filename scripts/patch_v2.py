@@ -36,6 +36,11 @@ def add_debug_to_compute_targets():
     with open(path) as f:
         c = f.read()
 
+    # Check if adaptive code is already present (from repo commit)
+    if 'pos_threshold = max(0.1, max_iou * 0.5)' in c:
+        print("[OK] compute_targets: adaptive threshold + debug already present")
+        return
+
     old = """    for i in range(response_sz):
         for j in range(response_sz):
             for k in range(5):
@@ -99,7 +104,7 @@ def add_debug_to_compute_targets():
     c = c.replace(old, new)
     with open(path, 'w') as f:
         f.write(c)
-    print("[OK] compute_targets: added debug logging")
+    print("[OK] compute_targets: added adaptive threshold + debug logging")
 
 
 def create_split_module():
