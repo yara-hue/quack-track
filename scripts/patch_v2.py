@@ -3,13 +3,14 @@ Comprehensive fix script for quack-track (patch_v2).
 Run in Colab:  python /content/quack-track/scripts/patch_v2.py
 
 Changes:
-1. Debug prints: positive anchor count, max IoU, warning when zero
-2. src/data/split.py: deterministic sequence-level train/val/test split
-3. dataset.py: accept seq_names filter param
-4. trainer.py: validation loop, early stopping, best-val checkpoint
-5. scripts/train.py: fix arg name (--checkpoint-dir)
-6. scripts/test.py: default to best_model.pth + --debug flag
-7. configs/default.yaml: epochs=80, patience=15
+1. Anchor centering: _anchors(), _build_anchors(), compute_targets() (fixes top-left shift)
+2. Debug prints: positive anchor count, max IoU, warning when zero
+3. src/data/split.py: deterministic sequence-level train/val/test split
+4. dataset.py: accept seq_names filter param
+5. trainer.py: validation loop, early stopping, best-val checkpoint
+6. scripts/train.py: fix arg name (--checkpoint-dir)
+7. scripts/test.py: default to best_model.pth + --debug flag
+8. configs/default.yaml: epochs=80, patience=15
 """
 
 import os
@@ -595,7 +596,103 @@ def fix_test_script():
     print("[OK] test.py: default checkpoint, --debug flag")
 
 
+def fix_anchor_centering():
+    """Fix anchor centers: use j*stride + center_offset so they are centered in the 255x255 crop
+    instead of shifted into the top-left quadrant (0..128)."""
+
+    # --- dataset.py: _anchors() ---
+    path = os.path.join(BASE, "src", "data", "dataset.py")
+    with open(path) as f:
+        c = f.read()
+    old = """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE):
+    anchors = []
+    for i in range(response_sz):
+        for j in range(response_sz):
+            cx = j * stride
+            cy = i * stride"""
+    new = """def _anchors(stride, ratios, response_sz, scale=ANCHOR_SCALE, search_sz=255):
+    anchors = []
+    center = (search_sz - (response_sz - 1) * stride) / 2.0
+    for i in range(response_sz):
+        for j in range(response_sz):
+            cx = j * stride + center
+            cy = i * stride + center"""
+    assert old in c, "_anchors() not found in dataset.py"
+    c = c.replace(old, new)
+    with open(path, 'w') as f:
+        f.write(c)
+    print("[OK] dataset.py: _anchors() centered")
+
+    # --- dataset.py: _compute_targets() Gaussian label (dead code) ---
+    with open(path) as f:
+        c = f.read()
+    old_g = """        gaussian = _gaussian_label((response_sz, response_sz),
+                                    (cx_crop / STRIDE, cy_crop / STRIDE), sigma)"""
+    new_g = """        center = (self.search_sz - (response_sz - 1) * STRIDE) / 2.0
+        gx_resp = (cx_crop - center) / STRIDE
+        gy_resp = (cy_crop - center) / STRIDE
+        gaussian = _gaussian_label((response_sz, response_sz),
+                                    (gx_resp, gy_resp), sigma)"""
+    if old_g in c:
+        c = c.replace(old_g, new_g)
+        old_a = """        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)"""
+        new_a = """        anc = _anchors(STRIDE, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE, self.search_sz)"""
+        assert old_a in c, "_anchors call not found in dataset.py _compute_targets"
+        c = c.replace(old_a, new_a)
+        with open(path, 'w') as f:
+            f.write(c)
+        print("[OK] dataset.py: _compute_targets() gaussian centered (dead code)")
+    else:
+        print("[OK] dataset.py: _compute_targets() already fixed or absent")
+
+    # --- trainer.py: compute_targets() Gaussian label ---
+    path = os.path.join(BASE, "src", "trainer.py")
+    with open(path) as f:
+        c = f.read()
+    old_gt = """    sigma = stride // 2
+    gaussian = _gaussian_label((response_sz, response_sz),
+                                (cx_crop / stride, cy_crop / stride), sigma)"""
+    new_gt = """    sigma = stride // 2
+    center = (search_sz - (response_sz - 1) * stride) / 2.0
+    gx_resp = (cx_crop - center) / stride
+    gy_resp = (cy_crop - center) / stride
+    gaussian = _gaussian_label((response_sz, response_sz),
+                                (gx_resp, gy_resp), sigma)"""
+    assert old_gt in c, "Gaussian label not found in trainer.py compute_targets"
+    c = c.replace(old_gt, new_gt)
+
+    old_ac = """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE)"""
+    new_ac = """    anc = _anchors(stride, ANCHOR_RATIOS, response_sz, ANCHOR_SCALE, search_sz)"""
+    assert old_ac in c, "_anchors call not found in trainer.py compute_targets"
+    c = c.replace(old_ac, new_ac)
+    with open(path, 'w') as f:
+        f.write(c)
+    print("[OK] trainer.py: compute_targets() gaussian + anchors centered")
+
+    # --- tracker.py: _build_anchors() ---
+    path = os.path.join(BASE, "src", "tracker.py")
+    with open(path) as f:
+        c = f.read()
+    old_tr = """        anchors = []
+        for i in range(self.response_sz):
+            for j in range(self.response_sz):
+                cx = j * self.stride
+                cy = i * self.stride"""
+    new_tr = """        anchors = []
+        center = (self.search_sz - (self.response_sz - 1) * self.stride) / 2.0
+        for i in range(self.response_sz):
+            for j in range(self.response_sz):
+                cx = j * self.stride + center
+                cy = i * self.stride + center"""
+    assert old_tr in c, "_build_anchors() not found in tracker.py"
+    c = c.replace(old_tr, new_tr)
+    with open(path, 'w') as f:
+        f.write(c)
+    print("[OK] tracker.py: _build_anchors() centered")
+
+
 if __name__ == "__main__":
+    fix_anchor_centering()
     fix_train_arg()
     add_debug_to_compute_targets()
     create_split_module()
