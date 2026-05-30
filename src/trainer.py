@@ -54,7 +54,7 @@ def compute_targets(search_bbox, crop_bbox, search_sz=255, stride=16, response_s
                     continue
                 iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
                 idx = (i * response_sz + j) * 5 + k
-                if iou > 0.6:
+                if iou > 0.5:
                     reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
                     reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
                     reg_target[2, idx] = math.log(gw / anc_w)

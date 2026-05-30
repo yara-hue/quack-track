@@ -596,6 +596,22 @@ def fix_test_script():
     print("[OK] test.py: default checkpoint, --debug flag")
 
 
+def fix_iou_threshold():
+    """Lower positive IoU threshold from 0.6 → 0.5 so non-square targets get regression signal."""
+    for fpath in [
+        os.path.join(BASE, "src", "trainer.py"),
+        os.path.join(BASE, "src", "data", "dataset.py"),
+    ]:
+        with open(fpath) as f:
+            c = f.read()
+        c = c.replace("if iou > 0.6:", "if iou > 0.5:")
+        c = c.replace("if iou_map[i, j, k] > 0.6:", "if iou_map[i, j, k] > 0.5:")
+        c = c.replace("iou_map > 0.6", "iou_map > 0.5")
+        with open(fpath, 'w') as f:
+            f.write(c)
+    print("[OK] IoU threshold: 0.6 → 0.5")
+
+
 def fix_anchor_centering():
     """Fix anchor centers: use j*stride + center_offset so they are centered in the 255x255 crop
     instead of shifted into the top-left quadrant (0..128)."""
