@@ -46,7 +46,7 @@ def add_debug_to_compute_targets():
                     continue
                 iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
                 idx = (i * response_sz + j) * 5 + k
-                if iou > 0.6:
+                if iou > 0.5:
                     reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
                     reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
                     reg_target[2, idx] = math.log(gw / anc_w)
@@ -68,7 +68,7 @@ def add_debug_to_compute_targets():
                 iou = _bbox_iou(anc_box, [gx, gy, gw, gh])
                 max_iou = max(max_iou, iou)
                 idx = (i * response_sz + j) * 5 + k
-                if iou > 0.6:
+                if iou > 0.5:
                     pos_count += 1
                     reg_target[0, idx] = float((gx - anc_box[0]) / anc_w)
                     reg_target[1, idx] = float((gy - anc_box[1]) / anc_h)
@@ -716,6 +716,7 @@ if __name__ == "__main__":
     rewrite_trainer()
     fix_config()
     fix_test_script()
+    fix_iou_threshold()
     print("\n=== All fixes applied ===")
     print("Next: python /content/quack-track/scripts/train.py")
     print("      --config /content/quack-track/configs/default.yaml")
